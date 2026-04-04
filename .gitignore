@@ -1,41 +1,237 @@
-# Compiled Lua sources
-luac.out
+task.wait(3)
 
-# luarocks build files
-*.src.rock
-*.zip
-*.tar.gz
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
+local Window = Rayfield:CreateWindow({
+    Name = "😎 BUB_Scripts",
+    LoadingTitle = "BUB_Scripts",
+    LoadingSubtitle = "AutoCounter + NumKeyBindBot + Anti-Ragdoll + AutoClicker",
+    Theme = "Default",
+    ToggleUIKeybind = "K",
+    DisableRayfieldPrompts = true,
+    DisableBuildWarnings = true,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "BUBScripts",
+        FileName = "Settings"
+    },
+    KeySystem = true,
+    KeySettings = {
+        Title = "BUB_Scripts Key System",
+        Subtitle = "Verification Required",
+        Note = "Join the Discord to get the key: https://discord.gg/J9BKhsn4",
+        FileName = "BUBScripts_Key",
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = {"bub2025", "BUB2025", "refillshrine", "Refillshrine"}
+    }
+})
 
-# Precompiled Headers
-*.gch
-*.pch
+local MainTab = Window:CreateTab("Main", 4483362458)
 
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
 
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+local RESET_CENTER = Vector3.new(8.582, -12.629, -34.327)
+local RANDOM_RADIUS = 500
+local MAX_DISTANCE = 3000
+local TELEPORT_OFFSET = CFrame.new(0, 2, 0)
+
+local isSpamming = false
+local attemptConnection = nil
+
+-- Numpad Cycle
+local autoCycleEnabled = false
+local tapsPerSecond = 10
+local selectedKeys = {"KeypadOne","KeypadTwo","KeypadThree","KeypadFour","KeypadFive",
+                      "KeypadSix","KeypadSeven","KeypadEight","KeypadNine","KeypadZero"}
+local currentIndex = 1
+
+-- Anti Ragdoll
+local antiRagdollEnabled = false
+local unRagdollRemote = game:GetService("ReplicatedStorage").Events.unRagdoll
+
+-- Auto Clicker
+local autoClickerEnabled = false
+local clicksPerSecond = 12
+
+-- ==================== SEAT SPAMMER ====================
+local function getRandomPositionAround(center, radius)
+	local angle = math.random() * math.pi * 2
+	local distance = math.random() * radius
+	local offsetX = math.cos(angle) * distance
+	local offsetZ = math.sin(angle) * distance
+	local offsetY = math.random(-25, 25)
+	return center + Vector3.new(offsetX, offsetY, offsetZ)
+end
+
+local function getNearestSeat()
+	local closestSeat = nil
+	local shortestDistance = math.huge
+	for _, obj in ipairs(workspace:GetDescendants()) do
+		if (obj:IsA("VehicleSeat") or obj:IsA("Seat")) and not obj.Occupant then
+			local distance = (obj.Position - rootPart.Position).Magnitude
+			if distance < shortestDistance and distance <= MAX_DISTANCE then
+				shortestDistance = distance
+				closestSeat = obj
+			end
+		end
+	end
+	return closestSeat
+end
+
+local function teleportToSeat(seat)
+	if not seat or not rootPart then return end
+	rootPart.CFrame = seat.CFrame * TELEPORT_OFFSET
+	task.wait(0.03)
+	if humanoid and seat and not seat.Occupant then
+		seat:Sit(humanoid)
+	end
+end
+
+local function resetPosition()
+	if rootPart then
+		local randomPos = getRandomPositionAround(RESET_CENTER, RANDOM_RADIUS)
+		rootPart.CFrame = CFrame.new(randomPos)
+	end
+end
+
+local function startSeatLoop()
+	if attemptConnection then return end
+	attemptConnection = RunService.Heartbeat:Connect(function()
+		local nearest = getNearestSeat()
+		if nearest then teleportToSeat(nearest) end
+		resetPosition()
+	end)
+end
+
+local function stopSeatLoop()
+	if attemptConnection then
+		attemptConnection:Disconnect()
+		attemptConnection = nil
+	end
+end
+
+-- ==================== UI ====================
+MainTab:CreateToggle({
+    Name = "Auto Car Counter",
+    CurrentValue = false,
+    Callback = function(Value)
+        isSpamming = Value
+        if isSpamming then
+            startSeatLoop()
+            Rayfield:Notify({Title = "Auto Counter", Content = "ENABLED", Duration = 4})
+        else
+            stopSeatLoop()
+            Rayfield:Notify({Title = "Auto Counter", Content = "DISABLED", Duration = 3})
+        end
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "0-9 Numpad Cycle",
+    CurrentValue = false,
+    Callback = function(Value)
+        autoCycleEnabled = Value
+        Rayfield:Notify({Title = "Numpad Cycle", Content = Value and "ENABLED" or "DISABLED", Duration = 3})
+    end,
+})
+
+MainTab:CreateSlider({
+    Name = "Numpad Speed (Taps/sec)",
+    Range = {1, 50},
+    Increment = 1,
+    CurrentValue = 10,
+    Callback = function(Value)
+        tapsPerSecond = Value
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Anti-Ragdoll",
+    CurrentValue = false,
+    Callback = function(Value)
+        antiRagdollEnabled = Value
+        Rayfield:Notify({Title = "Anti-Ragdoll", Content = Value and "ENABLED" or "DISABLED", Duration = 3})
+    end,
+})
+
+MainTab:CreateToggle({
+    Name = "Auto Clicker",
+    CurrentValue = false,
+    Callback = function(Value)
+        autoClickerEnabled = Value
+        Rayfield:Notify({Title = "Auto Clicker", Content = Value and "ENABLED" or "DISABLED", Duration = 3})
+    end,
+})
+
+MainTab:CreateSlider({
+    Name = "Click Speed (Clicks/sec)",
+    Range = {1, 30},
+    Increment = 1,
+    CurrentValue = 12,
+    Callback = function(Value)
+        clicksPerSecond = Value
+    end,
+})
+
+-- ==================== NUMPAD CYCLE ====================
+task.spawn(function()
+    while true do
+        if autoCycleEnabled then
+            local vim = game:GetService("VirtualInputManager")
+            local keyName = selectedKeys[currentIndex]
+            local keyCode = Enum.KeyCode[keyName]
+            
+            vim:SendKeyEvent(true, keyCode, false, game)
+            task.wait(0.001)
+            vim:SendKeyEvent(false, keyCode, false, game)
+            
+            currentIndex = currentIndex + 1
+            if currentIndex > #selectedKeys then currentIndex = 1 end
+            
+            task.wait(1 / tapsPerSecond)
+        else
+            task.wait(0.1)
+        end
+    end
+end)
+
+-- ==================== AUTO CLICKER - Moved Further Right (160, 0) ====================
+task.spawn(function()
+    while true do
+        if autoClickerEnabled then
+            -- Click at (320, 0) - moved another 80 to the right
+            VirtualInputManager:SendMouseButtonEvent(160, 0, 0, true, game, 0)
+            task.wait(0.001)
+            VirtualInputManager:SendMouseButtonEvent(160, 0, 0, false, game, 0)
+            
+            task.wait(1 / clicksPerSecond)
+        else
+            task.wait(0.1)
+        end
+    end
+end)
+
+-- ==================== ANTI RAGDOLL ====================
+RunService.Heartbeat:Connect(function()
+    if antiRagdollEnabled and humanoid and humanoid.PlatformStand then
+        unRagdollRemote:FireServer()
+    end
+end)
+
+Rayfield:Notify({
+    Title = "BUB_Scripts Loaded",
+    Content = "Join Our Discord",
+    Duration = 5,
+})
+
+print("✅ BUB_Scripts loaded successfully!")
 
